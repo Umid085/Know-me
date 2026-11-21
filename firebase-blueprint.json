@@ -623,6 +623,83 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "NotificationPrefs": {
+      "title": "NotificationPrefs",
+      "description": "Per-partner notification toggles, lead-time thresholds per module, browser alert preference, and dismissed alert IDs.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "browserPushEnabled": {
+          "type": "boolean"
+        },
+        "cycleEnabled": {
+          "type": "boolean"
+        },
+        "cycleLeadDays": {
+          "type": "integer",
+          "description": "Days before pre-period/period to notify (1 to 7)."
+        },
+        "timelineEnabled": {
+          "type": "boolean"
+        },
+        "timelineLeadDays": {
+          "type": "integer",
+          "description": "Days before notable dates and anniversaries to notify (1 to 30)."
+        },
+        "plannerEnabled": {
+          "type": "boolean"
+        },
+        "plannerLeadDays": {
+          "type": "integer",
+          "description": "Days before shared planner due dates to notify (1 to 14)."
+        },
+        "calendarEnabled": {
+          "type": "boolean"
+        },
+        "dossiersEnabled": {
+          "type": "boolean"
+        },
+        "dismissedIds": {
+          "type": "array",
+          "description": "Bounded list (max 100) of dismissed or acknowledged notification keys."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "uid",
+        "browserPushEnabled",
+        "cycleEnabled",
+        "cycleLeadDays",
+        "timelineEnabled",
+        "timelineLeadDays",
+        "plannerEnabled",
+        "plannerLeadDays",
+        "calendarEnabled",
+        "dossiersEnabled",
+        "dismissedIds",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -665,6 +742,10 @@
     "/coupleSpaces/{spaceId}/cycleLogs/{logId}": {
       "schema": { "$ref": "#/entities/CycleLog" },
       "description": "Daily cycle logs keyed by YYYY-MM-DD_slot with period status, flow, mood, and symptoms."
+    },
+    "/coupleSpaces/{spaceId}/notificationPrefs/{userId}": {
+      "schema": { "$ref": "#/entities/NotificationPrefs" },
+      "description": "Owner-only per-module notification toggles, lead times, and dismissed alert IDs."
     }
   }
 }

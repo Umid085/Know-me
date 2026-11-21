@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Check, CheckCircle2, Circle, Copy, Sparkles } from 'lucide-react';
+import { ArrowRight, Bell, Check, CheckCircle2, Circle, Copy, Sparkles } from 'lucide-react';
 import { useSpace } from '../context/SpaceContext';
 import {
   promotePlannerItemToWin,
@@ -11,6 +11,7 @@ import {
   ACCOMPLISHMENT_CATEGORY_LABELS,
   BUSYNESS_META,
   LIMITS,
+  NOTIFICATION_MODULE_LABELS,
   PLANNER_CATEGORY_LABELS,
   type BusynessLevel,
   type PartnerSlot,
@@ -29,11 +30,17 @@ interface TodayOverviewProps {
   onNavigate: (tab: WorkspaceTab) => void;
   onQuickAddWin: () => void;
   onQuickAddPlan: () => void;
+  onOpenNotifications: () => void;
 }
 
 const LEVELS: BusynessLevel[] = ['light', 'steady', 'busy', 'packed'];
 
-export function TodayOverview({ onNavigate, onQuickAddWin, onQuickAddPlan }: TodayOverviewProps) {
+export function TodayOverview({
+  onNavigate,
+  onQuickAddWin,
+  onQuickAddPlan,
+  onOpenNotifications,
+}: TodayOverviewProps) {
   const {
     user,
     space,
@@ -45,6 +52,9 @@ export function TodayOverview({ onNavigate, onQuickAddWin, onQuickAddPlan }: Tod
     accomplishments,
     cycleSettings,
     cycleLogs,
+    notifications,
+    unreadNotificationCount,
+    dismissNotification,
     getPartnerLabel,
     showToast,
   } = useSpace();
@@ -219,6 +229,82 @@ export function TodayOverview({ onNavigate, onQuickAddWin, onQuickAddPlan }: Tod
           </div>
         )}
       </section>
+
+      {/* Active Module Alerts Strip (only shown when there are unread alerts) */}
+      {unreadNotificationCount > 0 && (
+        <section className="bg-white border border-[#E5DDD1] rounded-xl p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-[#2C4C3B] shrink-0" />
+              <h2 className="font-serif text-lg font-normal text-[#231F1D]">
+                Needs Your Attention
+              </h2>
+              <span className="font-mono text-xs tabular-nums text-[#6D645D]">
+                · {unreadNotificationCount} active
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenNotifications}
+              className="inline-flex items-center gap-1 text-xs font-medium text-[#2C4C3B] hover:underline whitespace-nowrap shrink-0"
+            >
+              <span>All alerts &amp; settings</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <ul className="divide-y divide-[#EFE9DF] border-t border-[#EFE9DF]">
+            {notifications
+              .filter((n) => !n.isDismissed)
+              .slice(0, 3)
+              .map((item) => (
+                <li
+                  key={item.id}
+                  className="py-3 first:pt-3.5 last:pb-0 flex items-start justify-between gap-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(item.targetTab)}
+                    className="text-left min-w-0 flex-1 group"
+                  >
+                    <p className="text-[11px] flex items-center gap-1.5">
+                      <span
+                        className={`font-semibold ${
+                          item.module === 'cycle' ? 'text-[#7B3E52]' : 'text-[#2C4C3B]'
+                        }`}
+                      >
+                        {NOTIFICATION_MODULE_LABELS[item.module]}
+                      </span>
+                      <span className="text-[#D8CFC2]" aria-hidden="true">
+                        ·
+                      </span>
+                      <span
+                        className={`font-mono tabular-nums ${
+                          item.priority === 'high' ? 'text-[#B55336] font-medium' : 'text-[#6D645D]'
+                        }`}
+                      >
+                        {item.timingLabel}
+                      </span>
+                    </p>
+                    <p className="text-sm font-medium text-[#231F1D] group-hover:text-[#2C4C3B] transition-colors mt-0.5">
+                      {item.title}
+                    </p>
+                    <p className="text-xs text-[#6D645D] line-clamp-1 mt-0.5">{item.body}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void dismissNotification(item.id)}
+                    title="Mark as read"
+                    aria-label={`Dismiss ${item.title}`}
+                    className="p-1.5 text-[#6D645D] hover:text-[#2C4C3B] hover:bg-[#FAF7F2] rounded-md transition-colors shrink-0 mt-0.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
 
       {/* Optional Gentle Starter Prompts Card when Space is Completely Empty */}
       {isBrandNewSpace && (

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Bell,
   BookOpen,
   CalendarDays,
   CalendarHeart,
@@ -15,21 +16,27 @@ import { CycleCalendarView } from './components/CycleCalendarView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MonthlyCalendarView } from './components/MonthlyCalendarView';
 import { NotableDatesTimelineView } from './components/NotableDatesTimelineView';
+import { NotificationCenterDrawer } from './components/NotificationCenterDrawer';
 import { OnboardingGate } from './components/OnboardingGate';
 import { PartnerDossiersView } from './components/PartnerDossiersView';
 import { SharedPlannerView } from './components/SharedPlannerView';
 import { SpaceSettingsView } from './components/SpaceSettingsView';
 import { TodayOverview } from './components/TodayOverview';
 import { SpaceProvider, useSpace } from './context/SpaceContext';
-import type { WorkspaceTab } from './types/knowme';
+import type { NotificationModule, WorkspaceTab } from './types/knowme';
 
-const NAV_ITEMS: { id: WorkspaceTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const NAV_ITEMS: {
+  id: WorkspaceTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  notifModule?: NotificationModule;
+}[] = [
   { id: 'today', label: 'Today', icon: Sun },
-  { id: 'dossiers', label: 'Partner Dossiers', icon: BookOpen },
-  { id: 'planner', label: 'Shared Planner', icon: CheckSquare },
-  { id: 'timeline', label: 'Notable Dates', icon: CalendarHeart },
-  { id: 'calendar', label: 'Calendar & Wins', icon: CalendarDays },
-  { id: 'cycle', label: 'Cycle Calendar', icon: Moon },
+  { id: 'dossiers', label: 'Partner Dossiers', icon: BookOpen, notifModule: 'dossiers' },
+  { id: 'planner', label: 'Shared Planner', icon: CheckSquare, notifModule: 'planner' },
+  { id: 'timeline', label: 'Notable Dates', icon: CalendarHeart, notifModule: 'timeline' },
+  { id: 'calendar', label: 'Calendar & Wins', icon: CalendarDays, notifModule: 'calendar' },
+  { id: 'cycle', label: 'Cycle Calendar', icon: Moon, notifModule: 'cycle' },
 ];
 
 const TAB_TITLES: Record<WorkspaceTab, { title: string; ctaLabel?: string }> = {
@@ -49,6 +56,8 @@ function WorkspaceShell() {
     space,
     spaceLoading,
     currentUserSlot,
+    unreadNotificationCount,
+    unreadByModule,
     signOut,
     toast,
     dismissToast,
@@ -56,6 +65,7 @@ function WorkspaceShell() {
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('today');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const [dossierSignal, setDossierSignal] = useState(0);
   const [plannerSignal, setPlannerSignal] = useState(0);
@@ -142,19 +152,32 @@ function WorkspaceShell() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = activeTab === item.id;
+            const moduleUnread = item.notifModule ? unreadByModule[item.notifModule] : 0;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => handleNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-sm rounded-lg transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm rounded-lg transition-colors whitespace-nowrap ${
                   active
                     ? 'bg-white text-[#231F1D] font-semibold border border-[#E5DDD1]'
                     : 'text-[#6D645D] hover:text-[#231F1D] hover:bg-[#FAF7F2]/70 font-medium border border-transparent'
                 }`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#2C4C3B]' : 'text-[#6D645D]'}`} />
-                <span className="truncate">{item.label}</span>
+                <span className="flex items-center gap-3 min-w-0">
+                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#2C4C3B]' : 'text-[#6D645D]'}`} />
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {moduleUnread > 0 && (
+                  <span
+                    className={`font-mono text-[11px] tabular-nums shrink-0 ${
+                      item.notifModule === 'cycle' ? 'text-[#7B3E52]' : 'text-[#2C4C3B]'
+                    }`}
+                    aria-label={`${moduleUnread} unread alerts`}
+                  >
+                    {moduleUnread}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -207,7 +230,28 @@ function WorkspaceShell() {
             </div>
           </div>
 
-          <div className="shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen(true)}
+              aria-label={
+                unreadNotificationCount > 0
+                  ? `Open notifications (${unreadNotificationCount} unread)`
+                  : 'Open notifications'
+              }
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-[#231F1D] bg-white border border-[#E5DDD1] hover:bg-[#F2EDE4] rounded-lg transition-colors whitespace-nowrap shrink-0"
+            >
+              <Bell
+                className={`w-4 h-4 ${
+                  unreadNotificationCount > 0 ? 'text-[#2C4C3B]' : 'text-[#6D645D]'
+                }`}
+              />
+              {unreadNotificationCount > 0 && (
+                <span className="font-mono text-xs tabular-nums text-[#2C4C3B]">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </button>
             {headerMeta.ctaLabel && (
               <button
                 type="button"
@@ -234,6 +278,7 @@ function WorkspaceShell() {
                 setActiveTab('planner');
                 setPlannerSignal((n) => n + 1);
               }}
+              onOpenNotifications={() => setNotificationsOpen(true)}
             />
           )}
           {activeTab === 'dossiers' && <PartnerDossiersView openDrawerSignal={dossierSignal} />}
@@ -271,19 +316,31 @@ function WorkspaceShell() {
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
+                const moduleUnread = item.notifModule ? unreadByModule[item.notifModule] : 0;
                 return (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => handleNavigate(item.id)}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-sm rounded-lg transition-colors ${
+                    className={`w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm rounded-lg transition-colors ${
                       active
                         ? 'bg-white text-[#231F1D] font-semibold border border-[#E5DDD1]'
                         : 'text-[#6D645D] hover:text-[#231F1D]'
                     }`}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{item.label}</span>
+                    <span className="flex items-center gap-3 min-w-0">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </span>
+                    {moduleUnread > 0 && (
+                      <span
+                        className={`font-mono text-[11px] tabular-nums shrink-0 ${
+                          item.notifModule === 'cycle' ? 'text-[#7B3E52]' : 'text-[#2C4C3B]'
+                        }`}
+                      >
+                        {moduleUnread}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -302,6 +359,12 @@ function WorkspaceShell() {
           <div className="flex-1" onClick={() => setMobileMenuOpen(false)} />
         </div>
       )}
+
+      <NotificationCenterDrawer
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        onNavigate={handleNavigate}
+      />
 
       {toast && (
         <ToastBar

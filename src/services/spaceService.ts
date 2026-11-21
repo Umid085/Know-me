@@ -999,6 +999,71 @@ export async function deletePeriodSpan(
   }
 }
 
+export async function saveNotificationPrefs(
+  spaceId: string,
+  uid: string,
+  payload: {
+    browserPushEnabled: boolean;
+    cycleEnabled: boolean;
+    cycleLeadDays: number;
+    timelineEnabled: boolean;
+    timelineLeadDays: number;
+    plannerEnabled: boolean;
+    plannerLeadDays: number;
+    calendarEnabled: boolean;
+    dossiersEnabled: boolean;
+    dismissedIds: string[];
+    existsAlready: boolean;
+  }
+): Promise<void> {
+  const path = `coupleSpaces/${spaceId}/notificationPrefs/${uid}`;
+  const ref = doc(db, 'coupleSpaces', spaceId, 'notificationPrefs', uid);
+
+  const cleanDismissed = Array.from(
+    new Set(
+      payload.dismissedIds
+        .map((id) => clampText(id, 120))
+        .filter((id) => id.length > 0)
+    )
+  ).slice(-100);
+
+  const normalized = {
+    browserPushEnabled: Boolean(payload.browserPushEnabled),
+    cycleEnabled: Boolean(payload.cycleEnabled),
+    cycleLeadDays: clampInt(payload.cycleLeadDays, 1, 7, 3),
+    timelineEnabled: Boolean(payload.timelineEnabled),
+    timelineLeadDays: clampInt(payload.timelineLeadDays, 1, 30, 7),
+    plannerEnabled: Boolean(payload.plannerEnabled),
+    plannerLeadDays: clampInt(payload.plannerLeadDays, 1, 14, 2),
+    calendarEnabled: Boolean(payload.calendarEnabled),
+    dossiersEnabled: Boolean(payload.dossiersEnabled),
+    dismissedIds: cleanDismissed,
+  };
+
+  try {
+    if (payload.existsAlready) {
+      await updateDoc(ref, {
+        ...normalized,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(ref, {
+        spaceId,
+        uid,
+        ...normalized,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(
+      error,
+      payload.existsAlready ? OperationType.UPDATE : OperationType.CREATE,
+      path
+    );
+  }
+}
+
 export function getSpaceSubcollectionRef(
   spaceId: string,
   sub:

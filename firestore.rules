@@ -250,6 +250,35 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidNotificationPrefs(data) {
+      return data.keys().hasAll([
+          'spaceId', 'uid', 'browserPushEnabled', 'cycleEnabled', 'cycleLeadDays',
+          'timelineEnabled', 'timelineLeadDays', 'plannerEnabled', 'plannerLeadDays',
+          'calendarEnabled', 'dossiersEnabled', 'dismissedIds', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'uid', 'browserPushEnabled', 'cycleEnabled', 'cycleLeadDays',
+          'timelineEnabled', 'timelineLeadDays', 'plannerEnabled', 'plannerLeadDays',
+          'calendarEnabled', 'dossiersEnabled', 'dismissedIds', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        isValidId(data.uid) &&
+        data.browserPushEnabled is bool &&
+        data.cycleEnabled is bool &&
+        data.cycleLeadDays is int && data.cycleLeadDays >= 1 && data.cycleLeadDays <= 7 &&
+        data.timelineEnabled is bool &&
+        data.timelineLeadDays is int && data.timelineLeadDays >= 1 && data.timelineLeadDays <= 30 &&
+        data.plannerEnabled is bool &&
+        data.plannerLeadDays is int && data.plannerLeadDays >= 1 && data.plannerLeadDays <= 14 &&
+        data.calendarEnabled is bool &&
+        data.dossiersEnabled is bool &&
+        data.dismissedIds is list &&
+        data.dismissedIds.size() <= 100 &&
+        (data.dismissedIds.size() == 0 || (data.dismissedIds[0] is string && data.dismissedIds[0].size() <= 120)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // 3. Collection: userProfiles (Strict Owner-Only PII Isolation)
     match /userProfiles/{userId} {
       allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
@@ -560,6 +589,42 @@ service cloud.firestore {
           ]) &&
           isSpaceMember(spaceId);
         allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(logId) && isSpaceMember(spaceId);
+      }
+
+      // 5h. Subcollection: notificationPrefs (Strict Owner-Only Per-Module Preferences)
+      match /notificationPrefs/{userId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(userId) &&
+          request.auth.uid == userId &&
+          isSpaceMember(spaceId);
+        allow list: if false;
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(userId) &&
+          request.auth.uid == userId &&
+          isValidNotificationPrefs(incoming()) &&
+          incoming().spaceId == spaceId &&
+          incoming().uid == userId &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(userId) &&
+          request.auth.uid == userId &&
+          isValidNotificationPrefs(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'browserPushEnabled', 'cycleEnabled', 'cycleLeadDays',
+            'timelineEnabled', 'timelineLeadDays', 'plannerEnabled', 'plannerLeadDays',
+            'calendarEnabled', 'dossiersEnabled', 'dismissedIds', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if false;
       }
     }
   }

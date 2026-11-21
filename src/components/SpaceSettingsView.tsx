@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Check, Copy, LogOut, Sparkles, Users } from 'lucide-react';
+import { Bell, Check, Copy, LogOut, Sparkles, Users } from 'lucide-react';
 import { useSpace } from '../context/SpaceContext';
 import { seedStarterPrompts, updateCoupleSpaceSettings } from '../services/spaceService';
 import { LIMITS } from '../types/knowme';
+import { NotificationPreferencesForm } from './NotificationPreferencesForm';
 
 export function SpaceSettingsView() {
   const { user, space, signOut, showToast } = useSpace();
@@ -176,6 +177,21 @@ export function SpaceSettingsView() {
             </button>
           </div>
         </form>
+      </section>
+
+      {/* Notifications by Module */}
+      <section className="bg-white border border-[#E5DDD1] rounded-xl p-6 sm:p-8 space-y-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#231F1D]">
+            <Bell className="w-4 h-4 text-[#2C4C3B]" />
+            <span>Notifications by Module</span>
+          </div>
+          <p className="text-xs text-[#6D645D]">
+            Control which modules alert you, how early reminders appear, and whether to mirror them
+            as browser desktop alerts. Preferences are saved privately per partner.
+          </p>
+        </div>
+        <NotificationPreferencesForm />
       </section>
 
       {/* Starter Prompts & Account */}

@@ -358,3 +358,56 @@ export const CYCLE_PHASE_META: Record<
     softBgClass: 'bg-[#7C6B7D]/10',
   },
 };
+
+export type NotificationModule = 'cycle' | 'timeline' | 'planner' | 'calendar' | 'dossiers';
+export type NotificationPriority = 'high' | 'normal' | 'info';
+
+export interface NotificationPrefs {
+  spaceId: string;
+  uid: string;
+  browserPushEnabled: boolean;
+  cycleEnabled: boolean;
+  cycleLeadDays: number;
+  timelineEnabled: boolean;
+  timelineLeadDays: number;
+  plannerEnabled: boolean;
+  plannerLeadDays: number;
+  calendarEnabled: boolean;
+  dossiersEnabled: boolean;
+  dismissedIds: string[];
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface AppNotification {
+  id: string;
+  module: NotificationModule;
+  targetTab: WorkspaceTab;
+  priority: NotificationPriority;
+  timingLabel: string;
+  title: string;
+  body: string;
+  actionLabel: string;
+  isDismissed: boolean;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: Omit<NotificationPrefs, 'spaceId' | 'uid' | 'createdAt' | 'updatedAt'> = {
+  browserPushEnabled: false,
+  cycleEnabled: true,
+  cycleLeadDays: 3,
+  timelineEnabled: true,
+  timelineLeadDays: 7,
+  plannerEnabled: true,
+  plannerLeadDays: 2,
+  calendarEnabled: true,
+  dossiersEnabled: true,
+  dismissedIds: [],
+};
+
+export const NOTIFICATION_MODULE_LABELS: Record<NotificationModule, string> = {
+  cycle: 'Cycle Calendar',
+  timeline: 'Notable Dates',
+  planner: 'Shared Planner',
+  calendar: 'Calendar & Wins',
+  dossiers: 'Partner Dossiers',
+};

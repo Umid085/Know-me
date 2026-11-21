@@ -2,19 +2,32 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, type User } from 'firebase/auth';
 import { doc, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../firebase';
-import { ensureUserProfile, getSpaceSubcollectionRef } from '../services/spaceService';
-import type {
-  Accomplishment,
-  BusynessLog,
-  CoupleSpace,
-  CycleLog,
-  CycleSettings,
-  PartnerEntry,
-  PartnerSlot,
-  PlannerItem,
-  TimelineEvent,
-  UserProfile,
+import {
+  ensureUserProfile,
+  getSpaceSubcollectionRef,
+  saveNotificationPrefs,
+} from '../services/spaceService';
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  type Accomplishment,
+  type AppNotification,
+  type BusynessLog,
+  type CoupleSpace,
+  type CycleLog,
+  type CycleSettings,
+  type NotificationModule,
+  type NotificationPrefs,
+  type PartnerEntry,
+  type PartnerSlot,
+  type PlannerItem,
+  type TimelineEvent,
+  type UserProfile,
 } from '../types/knowme';
+import {
+  buildModuleNotifications,
+  dispatchBrowserNotification,
+  getBrowserNotificationPermission,
+} from '../utils/notifications';
 
 export interface ToastMessage {
   id: string;
@@ -22,6 +35,11 @@ export interface ToastMessage {
   actionLabel?: string;
   onAction?: () => void;
 }
+
+export type NotificationPrefsEditable = Omit<
+  NotificationPrefs,
+  'spaceId' | 'uid' | 'createdAt' | 'updatedAt'
+>;
 
 interface SpaceContextValue {
   user: User | null;
@@ -38,6 +56,14 @@ interface SpaceContextValue {
   accomplishments: Accomplishment[];
   cycleSettings: CycleSettings[];
   cycleLogs: CycleLog[];
+  notificationPrefs: NotificationPrefsEditable;
+  notifications: AppNotification[];
+  unreadNotificationCount: number;
+  unreadByModule: Record<NotificationModule, number>;
+  updateNotificationPrefs: (patch: Partial<NotificationPrefsEditable>) => Promise<void>;
+  dismissNotification: (notificationId: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  restoreDismissedNotifications: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   toast: ToastMessage | null;
@@ -63,6 +89,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
   const [cycleSettings, setCycleSettings] = useState<CycleSettings[]>([]);
   const [cycleLogs, setCycleLogs] = useState<CycleLog[]>([]);
+  const [rawNotificationPrefs, setRawNotificationPrefs] = useState<NotificationPrefs | null>(null);
+  const [notificationPrefsLoaded, setNotificationPrefsLoaded] = useState(false);
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [fatalError, setFatalError] = useState<Error | null>(null);
@@ -118,6 +146,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
           setAccomplishments([]);
           setCycleSettings([]);
           setCycleLogs([]);
+          setRawNotificationPrefs(null);
+          setNotificationPrefsLoaded(false);
         }
       },
       () => {
@@ -239,6 +269,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       setAccomplishments([]);
       setCycleSettings([]);
       setCycleLogs([]);
+      setRawNotificationPrefs(null);
+      setNotificationPrefsLoaded(false);
       return;
     }
 
@@ -395,6 +427,26 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    const notifPrefsPath = `${spacePath}/notificationPrefs/${user.uid}`;
+    const unsubNotifPrefs = onSnapshot(
+      doc(db, 'coupleSpaces', confirmedSpaceId, 'notificationPrefs', user.uid),
+      (snap) => {
+        if (snap.exists()) {
+          setRawNotificationPrefs(snap.data() as NotificationPrefs);
+        } else {
+          setRawNotificationPrefs(null);
+        }
+        setNotificationPrefsLoaded(true);
+      },
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.GET, notifPrefsPath);
+        } catch (wrapped) {
+          setFatalError(wrapped instanceof Error ? wrapped : new Error(String(wrapped)));
+        }
+      }
+    );
+
     return () => {
       unsubEntries();
       unsubPlanner();
@@ -403,6 +455,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       unsubWins();
       unsubCycleSettings();
       unsubCycleLogs();
+      unsubNotifPrefs();
     };
   }, [user, confirmedSpaceId]);
 
@@ -410,6 +463,169 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     if (!space || !user) return 'partnerA';
     return space.partnerBUid === user.uid ? 'partnerB' : 'partnerA';
   }, [space, user]);
+
+  const notificationPrefs: NotificationPrefsEditable = useMemo(() => {
+    if (!rawNotificationPrefs) return DEFAULT_NOTIFICATION_PREFS;
+    return {
+      browserPushEnabled: Boolean(rawNotificationPrefs.browserPushEnabled),
+      cycleEnabled: Boolean(rawNotificationPrefs.cycleEnabled),
+      cycleLeadDays: rawNotificationPrefs.cycleLeadDays ?? DEFAULT_NOTIFICATION_PREFS.cycleLeadDays,
+      timelineEnabled: Boolean(rawNotificationPrefs.timelineEnabled),
+      timelineLeadDays:
+        rawNotificationPrefs.timelineLeadDays ?? DEFAULT_NOTIFICATION_PREFS.timelineLeadDays,
+      plannerEnabled: Boolean(rawNotificationPrefs.plannerEnabled),
+      plannerLeadDays:
+        rawNotificationPrefs.plannerLeadDays ?? DEFAULT_NOTIFICATION_PREFS.plannerLeadDays,
+      calendarEnabled: Boolean(rawNotificationPrefs.calendarEnabled),
+      dossiersEnabled: Boolean(rawNotificationPrefs.dossiersEnabled),
+      dismissedIds: Array.isArray(rawNotificationPrefs.dismissedIds)
+        ? rawNotificationPrefs.dismissedIds
+        : [],
+    };
+  }, [rawNotificationPrefs]);
+
+  const notifications = useMemo(() => {
+    if (!space || !user) return [];
+    return buildModuleNotifications({
+      userId: user.uid,
+      currentUserSlot,
+      space,
+      partnerEntries,
+      plannerItems,
+      timelineEvents,
+      busynessLogs,
+      accomplishments,
+      cycleSettings,
+      cycleLogs,
+      prefs: rawNotificationPrefs,
+    });
+  }, [
+    space,
+    user,
+    currentUserSlot,
+    partnerEntries,
+    plannerItems,
+    timelineEvents,
+    busynessLogs,
+    accomplishments,
+    cycleSettings,
+    cycleLogs,
+    rawNotificationPrefs,
+  ]);
+
+  const { unreadNotificationCount, unreadByModule } = useMemo(() => {
+    const byModule: Record<NotificationModule, number> = {
+      cycle: 0,
+      timeline: 0,
+      planner: 0,
+      calendar: 0,
+      dossiers: 0,
+    };
+    let total = 0;
+    for (const item of notifications) {
+      if (!item.isDismissed) {
+        total += 1;
+        byModule[item.module] += 1;
+      }
+    }
+    return { unreadNotificationCount: total, unreadByModule: byModule };
+  }, [notifications]);
+
+  const updateNotificationPrefs = useCallback(
+    async (patch: Partial<NotificationPrefsEditable>) => {
+      if (!space || !user) return;
+      const merged: NotificationPrefsEditable = {
+        ...notificationPrefs,
+        ...patch,
+      };
+      await saveNotificationPrefs(space.id, user.uid, {
+        ...merged,
+        existsAlready: Boolean(rawNotificationPrefs),
+      });
+    },
+    [space, user, notificationPrefs, rawNotificationPrefs]
+  );
+
+  const dismissNotification = useCallback(
+    async (notificationId: string) => {
+      if (!space || !user) return;
+      if (notificationPrefs.dismissedIds.includes(notificationId)) return;
+      const nextDismissed = [...notificationPrefs.dismissedIds, notificationId].slice(-100);
+      await saveNotificationPrefs(space.id, user.uid, {
+        ...notificationPrefs,
+        dismissedIds: nextDismissed,
+        existsAlready: Boolean(rawNotificationPrefs),
+      });
+    },
+    [space, user, notificationPrefs, rawNotificationPrefs]
+  );
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!space || !user) return;
+    const unreadIds = notifications.filter((n) => !n.isDismissed).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    const mergedIds = Array.from(
+      new Set([...notificationPrefs.dismissedIds, ...unreadIds])
+    ).slice(-100);
+    await saveNotificationPrefs(space.id, user.uid, {
+      ...notificationPrefs,
+      dismissedIds: mergedIds,
+      existsAlready: Boolean(rawNotificationPrefs),
+    });
+  }, [space, user, notifications, notificationPrefs, rawNotificationPrefs]);
+
+  const restoreDismissedNotifications = useCallback(async () => {
+    if (!space || !user) return;
+    await saveNotificationPrefs(space.id, user.uid, {
+      ...notificationPrefs,
+      dismissedIds: [],
+      existsAlready: Boolean(rawNotificationPrefs),
+    });
+  }, [space, user, notificationPrefs, rawNotificationPrefs]);
+
+  // Deduplicated native browser notification dispatch when user explicitly opted in
+  useEffect(() => {
+    if (!user || !space || !notificationPrefsLoaded) return;
+    if (!notificationPrefs.browserPushEnabled) return;
+    if (getBrowserNotificationPermission() !== 'granted') return;
+
+    const unread = notifications.filter((n) => !n.isDismissed);
+    if (unread.length === 0) return;
+
+    const storageKey = `knowme_pushed_notifs_${space.id}_${user.uid}`;
+    let sentIds: string[] = [];
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          sentIds = parsed.filter((v): v is string => typeof v === 'string');
+        }
+      }
+    } catch {
+      sentIds = [];
+    }
+
+    const sentSet = new Set(sentIds);
+    const pending = unread.filter((n) => !sentSet.has(n.id));
+    if (pending.length === 0) return;
+
+    const batch = pending.slice(0, 3);
+    const newlySent: string[] = [];
+    for (const item of batch) {
+      const ok = dispatchBrowserNotification(item.title, item.body, item.id);
+      if (ok) newlySent.push(item.id);
+    }
+
+    if (newlySent.length > 0) {
+      try {
+        const updated = Array.from(new Set([...sentIds, ...newlySent])).slice(-150);
+        window.localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch {
+        // Ignore storage quota / iframe restrictions
+      }
+    }
+  }, [user, space, notificationPrefsLoaded, notificationPrefs.browserPushEnabled, notifications]);
 
   const getPartnerLabel = useCallback(
     (slot: 'partnerA' | 'partnerB' | 'shared' | 'together') => {
@@ -444,6 +660,14 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     accomplishments,
     cycleSettings,
     cycleLogs,
+    notificationPrefs,
+    notifications,
+    unreadNotificationCount,
+    unreadByModule,
+    updateNotificationPrefs,
+    dismissNotification,
+    markAllNotificationsRead,
+    restoreDismissedNotifications,
     signInWithGoogle,
     signOut,
     toast,
