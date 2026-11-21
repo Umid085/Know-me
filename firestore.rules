@@ -1,0 +1,459 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 0. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 1. Core Identity & Validation Primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidInviteCode(code) {
+      return code is string && code.size() >= 6 && code.size() <= 12 && code.matches('^[A-Z0-9]{6,12}$');
+    }
+
+    function isValidDateString(val) {
+      return val is string && val.size() == 10 && val.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isValidOptionalDateString(val) {
+      return val is string && (val == '' || isValidDateString(val));
+    }
+
+    function isSpaceMember(spaceId) {
+      return exists(/databases/$(database)/documents/coupleSpaces/$(spaceId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/coupleSpaces/$(spaceId)).data.memberUids;
+    }
+
+    // 2. Entity Validation Blueprints (Synchronized with firebase-blueprint.json)
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'email', 'photoURL', 'activeSpaceId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoURL', 'activeSpaceId', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.email is string && data.email.size() <= 160 &&
+        data.photoURL is string && data.photoURL.size() <= 500 &&
+        data.activeSpaceId is string && (data.activeSpaceId == '' || isValidId(data.activeSpaceId)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCoupleSpace(data) {
+      return data.keys().hasAll([
+          'id', 'spaceName', 'inviteCode', 'creatorUid', 'partnerAUid', 'partnerBUid',
+          'memberUids', 'partnerAName', 'partnerBName', 'relationshipStartDate', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'spaceName', 'inviteCode', 'creatorUid', 'partnerAUid', 'partnerBUid',
+          'memberUids', 'partnerAName', 'partnerBName', 'relationshipStartDate', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.spaceName is string && data.spaceName.size() >= 1 && data.spaceName.size() <= 80 &&
+        isValidInviteCode(data.inviteCode) &&
+        isValidId(data.creatorUid) &&
+        isValidId(data.partnerAUid) &&
+        data.partnerBUid is string && (data.partnerBUid == '' || isValidId(data.partnerBUid)) &&
+        data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 2 &&
+        data.memberUids[0] is string && isValidId(data.memberUids[0]) &&
+        (data.memberUids.size() == 1 || (data.memberUids[1] is string && isValidId(data.memberUids[1]))) &&
+        data.partnerAName is string && data.partnerAName.size() >= 1 && data.partnerAName.size() <= 60 &&
+        data.partnerBName is string && data.partnerBName.size() >= 1 && data.partnerBName.size() <= 60 &&
+        isValidOptionalDateString(data.relationshipStartDate) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSpaceInvite(data) {
+      return data.keys().hasAll([
+          'code', 'spaceId', 'creatorUid', 'claimed', 'claimedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'code', 'spaceId', 'creatorUid', 'claimed', 'claimedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidInviteCode(data.code) &&
+        isValidId(data.spaceId) &&
+        isValidId(data.creatorUid) &&
+        data.claimed is bool &&
+        data.claimedBy is string && (data.claimedBy == '' || isValidId(data.claimedBy)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPartnerEntry(data) {
+      return data.keys().hasAll([
+          'spaceId', 'subjectSlot', 'chapter', 'category', 'title',
+          'details', 'metaNote', 'pinned', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'subjectSlot', 'chapter', 'category', 'title',
+          'details', 'metaNote', 'pinned', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        data.subjectSlot in ['partnerA', 'partnerB', 'shared'] &&
+        data.chapter in ['essentials', 'care', 'routines', 'logistics'] &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.details is string && data.details.size() <= 2000 &&
+        data.metaNote is string && data.metaNote.size() <= 200 &&
+        data.pinned is bool &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPlannerItem(data) {
+      return data.keys().hasAll([
+          'spaceId', 'title', 'category', 'assignee', 'dueDate',
+          'notes', 'completed', 'promotedToWin', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'title', 'category', 'assignee', 'dueDate',
+          'notes', 'completed', 'promotedToWin', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.category in ['date_idea', 'home_life', 'trip', 'goal'] &&
+        data.assignee in ['together', 'partnerA', 'partnerB'] &&
+        isValidOptionalDateString(data.dueDate) &&
+        data.notes is string && data.notes.size() <= 1000 &&
+        data.completed is bool &&
+        data.promotedToWin is bool &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTimelineEvent(data) {
+      return data.keys().hasAll([
+          'spaceId', 'title', 'date', 'category', 'recurringYearly',
+          'location', 'story', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'title', 'date', 'category', 'recurringYearly',
+          'location', 'story', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        isValidDateString(data.date) &&
+        data.category in ['milestone', 'anniversary', 'trip', 'first'] &&
+        data.recurringYearly is bool &&
+        data.location is string && data.location.size() <= 120 &&
+        data.story is string && data.story.size() <= 2000 &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBusynessLog(data) {
+      return data.keys().hasAll([
+          'spaceId', 'date', 'partnerSlot', 'level', 'note', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'date', 'partnerSlot', 'level', 'note', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        isValidDateString(data.date) &&
+        data.partnerSlot in ['partnerA', 'partnerB'] &&
+        data.level in ['light', 'steady', 'busy', 'packed'] &&
+        data.note is string && data.note.size() <= 300 &&
+        isValidId(data.updatedBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAccomplishment(data) {
+      return data.keys().hasAll([
+          'spaceId', 'date', 'title', 'owner', 'category', 'reflection', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'date', 'title', 'owner', 'category', 'reflection', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        isValidDateString(data.date) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+        data.owner in ['partnerA', 'partnerB', 'together'] &&
+        data.category in ['personal', 'career', 'relationship', 'wellness'] &&
+        data.reflection is string && data.reflection.size() <= 1000 &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 3. Collection: userProfiles (Strict Owner-Only PII Isolation)
+    match /userProfiles/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'email', 'photoURL', 'activeSpaceId', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    // 4. Collection: spaceInvites (Exact Code Lookup, Atomic Single-Use Claim)
+    match /spaceInvites/{inviteCode} {
+      allow get: if isVerifiedUser() && isValidInviteCode(inviteCode);
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidInviteCode(inviteCode) &&
+        isValidSpaceInvite(incoming()) &&
+        incoming().code == inviteCode &&
+        incoming().creatorUid == request.auth.uid &&
+        incoming().claimed == false &&
+        incoming().claimedBy == '' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/coupleSpaces/$(incoming().spaceId));
+      allow update: if isVerifiedUser() &&
+        isValidInviteCode(inviteCode) &&
+        isValidSpaceInvite(incoming()) &&
+        existing().claimed == false &&
+        incoming().claimed == true &&
+        incoming().claimedBy == request.auth.uid &&
+        request.auth.uid != existing().creatorUid &&
+        incoming().code == existing().code &&
+        incoming().spaceId == existing().spaceId &&
+        incoming().creatorUid == existing().creatorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['claimed', 'claimedBy', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // 5. Collection: coupleSpaces (Master Source of Truth)
+    match /coupleSpaces/{spaceId} {
+      allow get: if isVerifiedUser() &&
+        isValidId(spaceId) &&
+        request.auth.uid in existing().memberUids;
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidId(spaceId) &&
+        isValidCoupleSpace(incoming()) &&
+        incoming().id == spaceId &&
+        incoming().creatorUid == request.auth.uid &&
+        incoming().partnerAUid == request.auth.uid &&
+        incoming().partnerBUid == '' &&
+        incoming().memberUids.size() == 1 &&
+        incoming().memberUids[0] == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/spaceInvites/$(incoming().inviteCode));
+      allow update: if isVerifiedUser() &&
+        isValidId(spaceId) &&
+        isValidCoupleSpace(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().inviteCode == existing().inviteCode &&
+        incoming().creatorUid == existing().creatorUid &&
+        incoming().partnerAUid == existing().partnerAUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Action 1: Partner B Joins via Atomic Invite Claim
+          (
+            existing().memberUids.size() == 1 &&
+            existing().partnerBUid == '' &&
+            !(request.auth.uid in existing().memberUids) &&
+            incoming().partnerBUid == request.auth.uid &&
+            incoming().memberUids.size() == 2 &&
+            incoming().memberUids[0] == existing().memberUids[0] &&
+            incoming().memberUids[1] == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'memberUids', 'partnerBUid', 'partnerBName', 'updatedAt'
+            ]) &&
+            getAfter(/databases/$(database)/documents/spaceInvites/$(existing().inviteCode)).data.claimed == true &&
+            getAfter(/databases/$(database)/documents/spaceInvites/$(existing().inviteCode)).data.claimedBy == request.auth.uid
+          ) ||
+          // Action 2: Space Member Updates Space Settings
+          (
+            request.auth.uid in existing().memberUids &&
+            incoming().partnerBUid == existing().partnerBUid &&
+            incoming().memberUids == existing().memberUids &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'spaceName', 'partnerAName', 'partnerBName', 'relationshipStartDate', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+
+      // 5a. Subcollection: partnerEntries
+      match /partnerEntries/{entryId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(entryId) &&
+          isValidPartnerEntry(incoming()) &&
+          incoming().spaceId == spaceId &&
+          incoming().createdBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(entryId) &&
+          isValidPartnerEntry(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().createdBy == existing().createdBy &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'subjectSlot', 'chapter', 'category', 'title', 'details', 'metaNote', 'pinned', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(entryId) && isSpaceMember(spaceId);
+      }
+
+      // 5b. Subcollection: plannerItems
+      match /plannerItems/{itemId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(itemId) &&
+          isValidPlannerItem(incoming()) &&
+          incoming().spaceId == spaceId &&
+          incoming().createdBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(itemId) &&
+          isValidPlannerItem(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().createdBy == existing().createdBy &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'category', 'assignee', 'dueDate', 'notes', 'completed', 'promotedToWin', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(itemId) && isSpaceMember(spaceId);
+      }
+
+      // 5c. Subcollection: timelineEvents
+      match /timelineEvents/{eventId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(eventId) &&
+          isValidTimelineEvent(incoming()) &&
+          incoming().spaceId == spaceId &&
+          incoming().createdBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(eventId) &&
+          isValidTimelineEvent(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().createdBy == existing().createdBy &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'date', 'category', 'recurringYearly', 'location', 'story', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(eventId) && isSpaceMember(spaceId);
+      }
+
+      // 5d. Subcollection: busynessLogs
+      match /busynessLogs/{logId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(logId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(logId) &&
+          isValidBusynessLog(incoming()) &&
+          incoming().spaceId == spaceId &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          logId == incoming().date + '_' + incoming().partnerSlot &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(logId) &&
+          isValidBusynessLog(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().date == existing().date &&
+          incoming().partnerSlot == existing().partnerSlot &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'level', 'note', 'updatedBy', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(logId) && isSpaceMember(spaceId);
+      }
+
+      // 5e. Subcollection: accomplishments
+      match /accomplishments/{winId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(winId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(winId) &&
+          isValidAccomplishment(incoming()) &&
+          incoming().spaceId == spaceId &&
+          incoming().createdBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(winId) &&
+          isValidAccomplishment(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().createdBy == existing().createdBy &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'date', 'title', 'owner', 'category', 'reflection', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(winId) && isSpaceMember(spaceId);
+      }
+    }
+  }
+}

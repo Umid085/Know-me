@@ -1,0 +1,531 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile and active couple space reference.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "activeSpaceId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "email",
+        "photoURL",
+        "activeSpaceId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CoupleSpace": {
+      "title": "CoupleSpace",
+      "description": "Private shared workspace synced between up to two partner accounts.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "spaceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "inviteCode": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 12,
+          "pattern": "^[A-Z0-9]{6,12}$"
+        },
+        "creatorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partnerAUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partnerBUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "memberUids": {
+          "type": "array",
+          "description": "Bounded list of at most 2 partner UIDs."
+        },
+        "partnerAName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "partnerBName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "relationshipStartDate": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "spaceName",
+        "inviteCode",
+        "creatorUid",
+        "partnerAUid",
+        "partnerBUid",
+        "memberUids",
+        "partnerAName",
+        "partnerBName",
+        "relationshipStartDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SpaceInvite": {
+      "title": "SpaceInvite",
+      "description": "Single-use invite lookup mapping a 6-character code to a CoupleSpace.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 12,
+          "pattern": "^[A-Z0-9]{6,12}$"
+        },
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "creatorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "claimed": {
+          "type": "boolean"
+        },
+        "claimedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "code",
+        "spaceId",
+        "creatorUid",
+        "claimed",
+        "claimedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PartnerEntry": {
+      "title": "PartnerEntry",
+      "description": "Structured partner dossier record across essentials, care, routines, and logistics.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subjectSlot": {
+          "type": "string",
+          "enum": ["partnerA", "partnerB", "shared"]
+        },
+        "chapter": {
+          "type": "string",
+          "enum": ["essentials", "care", "routines", "logistics"]
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "metaNote": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "subjectSlot",
+        "chapter",
+        "category",
+        "title",
+        "details",
+        "metaNote",
+        "pinned",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PlannerItem": {
+      "title": "PlannerItem",
+      "description": "Shared date idea, home task, trip item, or couple goal.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "enum": ["date_idea", "home_life", "trip", "goal"]
+        },
+        "assignee": {
+          "type": "string",
+          "enum": ["together", "partnerA", "partnerB"]
+        },
+        "dueDate": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "promotedToWin": {
+          "type": "boolean"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "title",
+        "category",
+        "assignee",
+        "dueDate",
+        "notes",
+        "completed",
+        "promotedToWin",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TimelineEvent": {
+      "title": "TimelineEvent",
+      "description": "Notable relationship milestone, anniversary, trip, or first.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["milestone", "anniversary", "trip", "first"]
+        },
+        "recurringYearly": {
+          "type": "boolean"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "story": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "title",
+        "date",
+        "category",
+        "recurringYearly",
+        "location",
+        "story",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BusynessLog": {
+      "title": "BusynessLog",
+      "description": "Daily bandwidth and busyness level for one partner on a calendar date.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "partnerSlot": {
+          "type": "string",
+          "enum": ["partnerA", "partnerB"]
+        },
+        "level": {
+          "type": "string",
+          "enum": ["light", "steady", "busy", "packed"]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "date",
+        "partnerSlot",
+        "level",
+        "note",
+        "updatedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Accomplishment": {
+      "title": "Accomplishment",
+      "description": "Daily win or shared accomplishment logged on a calendar date.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "owner": {
+          "type": "string",
+          "enum": ["partnerA", "partnerB", "together"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["personal", "career", "relationship", "wellness"]
+        },
+        "reflection": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "date",
+        "title",
+        "owner",
+        "category",
+        "reflection",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/userProfiles/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile and active couple space pointer."
+    },
+    "/coupleSpaces/{spaceId}": {
+      "schema": { "$ref": "#/entities/CoupleSpace" },
+      "description": "Shared couple workspace document with memberUids (max 2)."
+    },
+    "/spaceInvites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/SpaceInvite" },
+      "description": "Single-use invite code lookup for pairing a second partner."
+    },
+    "/coupleSpaces/{spaceId}/partnerEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/PartnerEntry" },
+      "description": "Partner database entries across all four chapters."
+    },
+    "/coupleSpaces/{spaceId}/plannerItems/{itemId}": {
+      "schema": { "$ref": "#/entities/PlannerItem" },
+      "description": "Shared planner tasks, date ideas, trips, and goals."
+    },
+    "/coupleSpaces/{spaceId}/timelineEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/TimelineEvent" },
+      "description": "Notable dates timeline milestones and anniversaries."
+    },
+    "/coupleSpaces/{spaceId}/busynessLogs/{logId}": {
+      "schema": { "$ref": "#/entities/BusynessLog" },
+      "description": "Daily partner busyness indicators keyed by YYYY-MM-DD_slot."
+    },
+    "/coupleSpaces/{spaceId}/accomplishments/{winId}": {
+      "schema": { "$ref": "#/entities/Accomplishment" },
+      "description": "Daily accomplishments and wins logged on calendar dates."
+    }
+  }
+}

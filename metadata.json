@@ -1,0 +1,6 @@
+{
+  "name": "Know Me",
+  "description": "A shared editorial database, planner, notable dates timeline, and monthly busyness and accomplishments calendar for couples and partners.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
