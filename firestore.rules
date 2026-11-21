@@ -262,7 +262,7 @@ service cloud.firestore {
     match /coupleSpaces/{spaceId} {
       allow get: if isVerifiedUser() &&
         isValidId(spaceId) &&
-        request.auth.uid in existing().memberUids;
+        (resource == null || request.auth.uid in existing().memberUids);
       allow list: if false;
       allow create: if isVerifiedUser() &&
         isValidId(spaceId) &&

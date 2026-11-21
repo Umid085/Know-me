@@ -131,7 +131,17 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       doc(db, 'userProfiles', user.uid),
       (snap) => {
         if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
+          const data = snap.data() as UserProfile;
+          setProfile((prev) => {
+            if (
+              snap.metadata.hasPendingWrites &&
+              data.activeSpaceId &&
+              data.activeSpaceId !== prev?.activeSpaceId
+            ) {
+              return prev;
+            }
+            return data;
+          });
         }
         setProfileLoading(false);
       },
@@ -150,18 +160,13 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
-  // 3. Subscribe to coupleSpace + all 5 subcollections once activeSpaceId exists
+  // 3a. Subscribe to parent coupleSpace document first
   const activeSpaceId = profile?.activeSpaceId || '';
 
   useEffect(() => {
     if (!user || !activeSpaceId) {
       setSpace(null);
       setSpaceLoading(false);
-      setPartnerEntries([]);
-      setPlannerItems([]);
-      setTimelineEvents([]);
-      setBusynessLogs([]);
-      setAccomplishments([]);
       return;
     }
 
@@ -187,9 +192,35 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    return () => {
+      unsubSpace();
+    };
+  }, [user, activeSpaceId]);
+
+  // 3b. Subscribe to the 5 subcollections only once parent space membership is confirmed
+  const confirmedSpaceId =
+    user && space && space.id === activeSpaceId && space.memberUids.includes(user.uid)
+      ? space.id
+      : '';
+
+  useEffect(() => {
+    if (!user || !confirmedSpaceId) {
+      setPartnerEntries([]);
+      setPlannerItems([]);
+      setTimelineEvents([]);
+      setBusynessLogs([]);
+      setAccomplishments([]);
+      return;
+    }
+
+    const spacePath = `coupleSpaces/${confirmedSpaceId}`;
+
     const entriesPath = `${spacePath}/partnerEntries`;
     const unsubEntries = onSnapshot(
-      query(getSpaceSubcollectionRef(activeSpaceId, 'partnerEntries'), where('spaceId', '==', activeSpaceId)),
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'partnerEntries'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PartnerEntry, 'id'>) }));
         list.sort((a, b) => {
@@ -209,7 +240,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
     const plannerPath = `${spacePath}/plannerItems`;
     const unsubPlanner = onSnapshot(
-      query(getSpaceSubcollectionRef(activeSpaceId, 'plannerItems'), where('spaceId', '==', activeSpaceId)),
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'plannerItems'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlannerItem, 'id'>) }));
         list.sort((a, b) => {
@@ -232,7 +266,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
     const timelinePath = `${spacePath}/timelineEvents`;
     const unsubTimeline = onSnapshot(
-      query(getSpaceSubcollectionRef(activeSpaceId, 'timelineEvents'), where('spaceId', '==', activeSpaceId)),
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'timelineEvents'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TimelineEvent, 'id'>) }));
         list.sort((a, b) => b.date.localeCompare(a.date));
@@ -249,7 +286,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
     const busynessPath = `${spacePath}/busynessLogs`;
     const unsubBusyness = onSnapshot(
-      query(getSpaceSubcollectionRef(activeSpaceId, 'busynessLogs'), where('spaceId', '==', activeSpaceId)),
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'busynessLogs'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BusynessLog, 'id'>) }));
         setBusynessLogs(list);
@@ -265,7 +305,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
     const winsPath = `${spacePath}/accomplishments`;
     const unsubWins = onSnapshot(
-      query(getSpaceSubcollectionRef(activeSpaceId, 'accomplishments'), where('spaceId', '==', activeSpaceId)),
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'accomplishments'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
       (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Accomplishment, 'id'>) }));
         list.sort((a, b) => {
@@ -285,14 +328,13 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => {
-      unsubSpace();
       unsubEntries();
       unsubPlanner();
       unsubTimeline();
       unsubBusyness();
       unsubWins();
     };
-  }, [user, activeSpaceId]);
+  }, [user, confirmedSpaceId]);
 
   const currentUserSlot: PartnerSlot = useMemo(() => {
     if (!space || !user) return 'partnerA';

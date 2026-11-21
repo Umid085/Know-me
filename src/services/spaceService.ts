@@ -158,12 +158,13 @@ export async function createCoupleSpace(params: {
       updatedAt: serverTimestamp(),
     });
 
-    batch.update(profileRef, {
+    await batch.commit();
+
+    await updateDoc(profileRef, {
       activeSpaceId: spaceId,
       updatedAt: serverTimestamp(),
     });
 
-    await batch.commit();
     return { spaceId, inviteCode };
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, spacePath);
@@ -219,11 +220,12 @@ export async function joinCoupleSpace(params: {
       partnerBName: cleanPartnerB,
       updatedAt: serverTimestamp(),
     });
-    batch.update(doc(db, 'userProfiles', params.user.uid), {
+    await batch.commit();
+
+    await updateDoc(doc(db, 'userProfiles', params.user.uid), {
       activeSpaceId: invite.spaceId,
       updatedAt: serverTimestamp(),
     });
-    await batch.commit();
     return { spaceId: invite.spaceId };
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, spacePath);
