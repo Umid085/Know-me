@@ -15,6 +15,9 @@ import {
   type AccomplishmentCategory,
   type AccomplishmentOwner,
   type BusynessLevel,
+  type CycleFlow,
+  type CycleMood,
+  type CycleSymptom,
   type DossierChapter,
   type EntrySubjectSlot,
   type PartnerSlot,
@@ -24,6 +27,7 @@ import {
   type TimelineCategory,
   type UserProfile,
 } from '../types/knowme';
+import { addDaysToDateString } from '../utils/cycle';
 import { getTodayDateString } from '../utils/dates';
 
 function clampText(value: string, max: number): string {
@@ -779,9 +783,232 @@ export async function seedStarterPrompts(spaceId: string, uid: string): Promise<
   }
 }
 
+// --- Cycle Calendar Settings & Daily Logs ---
+
+const ALLOWED_SYMPTOMS: ReadonlySet<CycleSymptom> = new Set([
+  'cramps',
+  'headache',
+  'bloating',
+  'fatigue',
+  'backache',
+  'cravings',
+  'tender',
+  'insomnia',
+]);
+
+function clampInt(val: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(val)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(val)));
+}
+
+export async function upsertCycleSettings(
+  spaceId: string,
+  uid: string,
+  payload: {
+    partnerSlot: PartnerSlot;
+    enabled: boolean;
+    averageCycleLength: number;
+    averagePeriodLength: number;
+    lutealLength: number;
+    careNotes: string;
+    existsAlready: boolean;
+  }
+): Promise<void> {
+  const path = `coupleSpaces/${spaceId}/cycleSettings/${payload.partnerSlot}`;
+  const ref = doc(db, 'coupleSpaces', spaceId, 'cycleSettings', payload.partnerSlot);
+  const averageCycleLength = clampInt(payload.averageCycleLength, 21, 45, 28);
+  const averagePeriodLength = clampInt(payload.averagePeriodLength, 2, 10, 5);
+  const lutealLength = clampInt(payload.lutealLength, 10, 18, 14);
+  const careNotes = clampText(payload.careNotes, LIMITS.cycleCareNotes);
+
+  try {
+    if (payload.existsAlready) {
+      await updateDoc(ref, {
+        enabled: Boolean(payload.enabled),
+        averageCycleLength,
+        averagePeriodLength,
+        lutealLength,
+        careNotes,
+        updatedBy: uid,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(ref, {
+        spaceId,
+        partnerSlot: payload.partnerSlot,
+        enabled: Boolean(payload.enabled),
+        averageCycleLength,
+        averagePeriodLength,
+        lutealLength,
+        careNotes,
+        updatedBy: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(
+      error,
+      payload.existsAlready ? OperationType.UPDATE : OperationType.CREATE,
+      path
+    );
+  }
+}
+
+export async function upsertCycleLog(
+  spaceId: string,
+  uid: string,
+  payload: {
+    date: string;
+    partnerSlot: PartnerSlot;
+    isPeriodDay: boolean;
+    flow: CycleFlow;
+    mood: CycleMood;
+    symptoms: CycleSymptom[];
+    note: string;
+    existsAlready: boolean;
+  }
+): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.date)) throw new Error('Valid date required.');
+  const logId = `${payload.date}_${payload.partnerSlot}`;
+  const path = `coupleSpaces/${spaceId}/cycleLogs/${logId}`;
+  const ref = doc(db, 'coupleSpaces', spaceId, 'cycleLogs', logId);
+  const cleanNote = clampText(payload.note, LIMITS.cycleDailyNote);
+  const cleanSymptoms = Array.from(
+    new Set(payload.symptoms.filter((s) => ALLOWED_SYMPTOMS.has(s)))
+  ).slice(0, 8);
+  const cleanFlow: CycleFlow = payload.isPeriodDay
+    ? payload.flow === 'none'
+      ? 'medium'
+      : payload.flow
+    : payload.flow === 'spotting'
+    ? 'spotting'
+    : 'none';
+
+  try {
+    if (payload.existsAlready) {
+      await updateDoc(ref, {
+        isPeriodDay: Boolean(payload.isPeriodDay),
+        flow: cleanFlow,
+        mood: payload.mood,
+        symptoms: cleanSymptoms,
+        note: cleanNote,
+        updatedBy: uid,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(ref, {
+        spaceId,
+        date: payload.date,
+        partnerSlot: payload.partnerSlot,
+        isPeriodDay: Boolean(payload.isPeriodDay),
+        flow: cleanFlow,
+        mood: payload.mood,
+        symptoms: cleanSymptoms,
+        note: cleanNote,
+        updatedBy: uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(
+      error,
+      payload.existsAlready ? OperationType.UPDATE : OperationType.CREATE,
+      path
+    );
+  }
+}
+
+export async function logPeriodSpan(
+  spaceId: string,
+  uid: string,
+  params: {
+    startDate: string;
+    daysCount: number;
+    partnerSlot: PartnerSlot;
+    existingDates: Set<string>;
+  }
+): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(params.startDate)) throw new Error('Valid start date required.');
+  const span = clampInt(params.daysCount, 1, 10, 5);
+  const path = `coupleSpaces/${spaceId}/cycleLogs/span_${params.startDate}`;
+
+  try {
+    const batch = writeBatch(db);
+    for (let i = 0; i < span; i++) {
+      const dateStr = addDaysToDateString(params.startDate, i);
+      const logId = `${dateStr}_${params.partnerSlot}`;
+      const ref = doc(db, 'coupleSpaces', spaceId, 'cycleLogs', logId);
+      const defaultFlow: CycleFlow = i === 0 || i === span - 1 ? 'light' : 'medium';
+
+      if (params.existingDates.has(dateStr)) {
+        batch.update(ref, {
+          isPeriodDay: true,
+          flow: defaultFlow,
+          updatedBy: uid,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        batch.set(ref, {
+          spaceId,
+          date: dateStr,
+          partnerSlot: params.partnerSlot,
+          isPeriodDay: true,
+          flow: defaultFlow,
+          mood: '',
+          symptoms: [],
+          note: '',
+          updatedBy: uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteCycleLog(spaceId: string, logId: string): Promise<void> {
+  const path = `coupleSpaces/${spaceId}/cycleLogs/${logId}`;
+  try {
+    await deleteDoc(doc(db, 'coupleSpaces', spaceId, 'cycleLogs', logId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function deletePeriodSpan(
+  spaceId: string,
+  partnerSlot: PartnerSlot,
+  dates: string[]
+): Promise<void> {
+  if (dates.length === 0) return;
+  const path = `coupleSpaces/${spaceId}/cycleLogs/delete_span`;
+  try {
+    const batch = writeBatch(db);
+    for (const dateStr of dates) {
+      const logId = `${dateStr}_${partnerSlot}`;
+      batch.delete(doc(db, 'coupleSpaces', spaceId, 'cycleLogs', logId));
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export function getSpaceSubcollectionRef(
   spaceId: string,
-  sub: 'partnerEntries' | 'plannerItems' | 'timelineEvents' | 'busynessLogs' | 'accomplishments'
+  sub:
+    | 'partnerEntries'
+    | 'plannerItems'
+    | 'timelineEvents'
+    | 'busynessLogs'
+    | 'accomplishments'
+    | 'cycleSettings'
+    | 'cycleLogs'
 ) {
   return collection(db, 'coupleSpaces', spaceId, sub);
 }

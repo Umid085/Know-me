@@ -204,6 +204,52 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidCycleSettings(data) {
+      return data.keys().hasAll([
+          'spaceId', 'partnerSlot', 'enabled', 'averageCycleLength',
+          'averagePeriodLength', 'lutealLength', 'careNotes', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'partnerSlot', 'enabled', 'averageCycleLength',
+          'averagePeriodLength', 'lutealLength', 'careNotes', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        data.partnerSlot in ['partnerA', 'partnerB'] &&
+        data.enabled is bool &&
+        data.averageCycleLength is int && data.averageCycleLength >= 21 && data.averageCycleLength <= 45 &&
+        data.averagePeriodLength is int && data.averagePeriodLength >= 2 && data.averagePeriodLength <= 10 &&
+        data.lutealLength is int && data.lutealLength >= 10 && data.lutealLength <= 18 &&
+        data.careNotes is string && data.careNotes.size() <= 500 &&
+        isValidId(data.updatedBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCycleLog(data) {
+      return data.keys().hasAll([
+          'spaceId', 'date', 'partnerSlot', 'isPeriodDay', 'flow',
+          'mood', 'symptoms', 'note', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'spaceId', 'date', 'partnerSlot', 'isPeriodDay', 'flow',
+          'mood', 'symptoms', 'note', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.spaceId) &&
+        isValidDateString(data.date) &&
+        data.partnerSlot in ['partnerA', 'partnerB'] &&
+        data.isPeriodDay is bool &&
+        data.flow in ['none', 'spotting', 'light', 'medium', 'heavy'] &&
+        data.mood in ['', 'calm', 'happy', 'sensitive', 'tired', 'irritable', 'anxious', 'energized'] &&
+        data.symptoms is list &&
+        data.symptoms.size() <= 8 &&
+        data.symptoms.hasOnly(['cramps', 'headache', 'bloating', 'fatigue', 'backache', 'cravings', 'tender', 'insomnia']) &&
+        (data.symptoms.size() == 0 || data.symptoms[0] is string) &&
+        data.note is string && data.note.size() <= 400 &&
+        isValidId(data.updatedBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // 3. Collection: userProfiles (Strict Owner-Only PII Isolation)
     match /userProfiles/{userId} {
       allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
@@ -453,6 +499,67 @@ service cloud.firestore {
           ]) &&
           isSpaceMember(spaceId);
         allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(winId) && isSpaceMember(spaceId);
+      }
+
+      // 5f. Subcollection: cycleSettings
+      match /cycleSettings/{slotId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(slotId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(slotId) &&
+          isValidCycleSettings(incoming()) &&
+          incoming().spaceId == spaceId &&
+          slotId == incoming().partnerSlot &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(slotId) &&
+          isValidCycleSettings(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().partnerSlot == existing().partnerSlot &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'enabled', 'averageCycleLength', 'averagePeriodLength', 'lutealLength', 'careNotes', 'updatedBy', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(slotId) && isSpaceMember(spaceId);
+      }
+
+      // 5g. Subcollection: cycleLogs
+      match /cycleLogs/{logId} {
+        allow get: if isVerifiedUser() && isValidId(spaceId) && isValidId(logId) && isSpaceMember(spaceId);
+        allow list: if isVerifiedUser() && isValidId(spaceId) && resource.data.spaceId == spaceId && isSpaceMember(spaceId);
+        allow create: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(logId) &&
+          isValidCycleLog(incoming()) &&
+          incoming().spaceId == spaceId &&
+          logId == incoming().date + '_' + incoming().partnerSlot &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isSpaceMember(spaceId);
+        allow update: if isVerifiedUser() &&
+          isValidId(spaceId) &&
+          isValidId(logId) &&
+          isValidCycleLog(incoming()) &&
+          incoming().spaceId == existing().spaceId &&
+          incoming().date == existing().date &&
+          incoming().partnerSlot == existing().partnerSlot &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedBy == request.auth.uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'isPeriodDay', 'flow', 'mood', 'symptoms', 'note', 'updatedBy', 'updatedAt'
+          ]) &&
+          isSpaceMember(spaceId);
+        allow delete: if isVerifiedUser() && isValidId(spaceId) && isValidId(logId) && isSpaceMember(spaceId);
       }
     }
   }

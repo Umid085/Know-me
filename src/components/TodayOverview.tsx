@@ -16,6 +16,7 @@ import {
   type PartnerSlot,
   type WorkspaceTab,
 } from '../types/knowme';
+import { computeCycleSummary } from '../utils/cycle';
 import {
   computeDaysBetween,
   formatReadableDate,
@@ -42,6 +43,8 @@ export function TodayOverview({ onNavigate, onQuickAddWin, onQuickAddPlan }: Tod
     timelineEvents,
     busynessLogs,
     accomplishments,
+    cycleSettings,
+    cycleLogs,
     getPartnerLabel,
     showToast,
   } = useSpace();
@@ -97,6 +100,16 @@ export function TodayOverview({ onNavigate, onQuickAddWin, onQuickAddPlan }: Tod
     const diff = computeDaysBetween(space.relationshipStartDate, today);
     return diff >= 0 ? diff : null;
   }, [space?.relationshipStartDate, today]);
+
+  const activeCycleSnapshot = useMemo(() => {
+    const enabledSlot =
+      cycleSettings.find((s) => s.enabled)?.partnerSlot || cycleLogs[0]?.partnerSlot || null;
+    if (!enabledSlot) return null;
+    const logs = cycleLogs.filter((l) => l.partnerSlot === enabledSlot);
+    const settings = cycleSettings.find((s) => s.partnerSlot === enabledSlot) || null;
+    const summary = computeCycleSummary(logs, settings, today);
+    return { slot: enabledSlot, settings, summary };
+  }, [cycleLogs, cycleSettings, today]);
 
   function openBusynessEditor(slot: PartnerSlot) {
     const existing = todayLogs[slot];
@@ -593,6 +606,73 @@ export function TodayOverview({ onNavigate, onQuickAddWin, onQuickAddPlan }: Tod
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+          {/* Cycle Guide Card */}
+          <div className="bg-white border border-[#E5DDD1] rounded-xl p-6 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs font-mono text-[#7B3E52]">Cycle Calendar</p>
+              <button
+                type="button"
+                onClick={() => onNavigate('cycle')}
+                className="text-xs font-medium text-[#2C4C3B] hover:underline whitespace-nowrap"
+              >
+                Full guide &amp; forecast
+              </button>
+            </div>
+
+            {activeCycleSnapshot && activeCycleSnapshot.summary.currentAdvice ? (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p
+                    className={`font-serif text-2xl ${activeCycleSnapshot.summary.currentAdvice.accentTextClass}`}
+                  >
+                    {activeCycleSnapshot.summary.isCurrentlyOnPeriod &&
+                    activeCycleSnapshot.summary.currentPeriodDay
+                      ? `Day ${activeCycleSnapshot.summary.currentPeriodDay} of ${activeCycleSnapshot.summary.effectivePeriodLength} of period`
+                      : activeCycleSnapshot.summary.currentAdvice.title}
+                  </p>
+                  <p className="text-xs font-mono text-[#6D645D] tabular-nums">
+                    {getPartnerLabel(activeCycleSnapshot.slot)} · Cycle Day{' '}
+                    {activeCycleSnapshot.summary.currentCycleDay} of{' '}
+                    {activeCycleSnapshot.summary.effectiveCycleLength}
+                    {!activeCycleSnapshot.summary.isCurrentlyOnPeriod &&
+                    activeCycleSnapshot.summary.daysUntilNextPeriod !== null
+                      ? ` · Next period in ${activeCycleSnapshot.summary.daysUntilNextPeriod}d`
+                      : ''}
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-[#EFE9DF] space-y-1.5">
+                  <p className="text-[11px] font-mono text-[#2C4C3B]">Today’s advice</p>
+                  <p className="text-xs text-[#231F1D] leading-relaxed">
+                    {activeCycleSnapshot.summary.currentAdvice.howToBehave[0]}
+                  </p>
+                </div>
+
+                {activeCycleSnapshot.summary.upcomingStages[1] && (
+                  <p className="text-xs text-[#6D645D] pt-1 font-mono tabular-nums">
+                    Up next in {activeCycleSnapshot.summary.upcomingStages[1].daysUntil}d:{' '}
+                    <span className="text-[#231F1D] font-sans font-medium">
+                      {activeCycleSnapshot.summary.upcomingStages[1].title}
+                    </span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-[#6D645D]">
+                  Pick her last period start date once to see which day she&apos;s on, how to
+                  behave today, and what comes next.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('cycle')}
+                  className="text-xs font-medium text-[#7B3E52] hover:underline"
+                >
+                  Set period start date
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -102,6 +102,7 @@ export function OnboardingGate() {
           <span className="whitespace-nowrap shrink-0">Shared Planner</span>
           <span className="whitespace-nowrap shrink-0">Notable Dates</span>
           <span className="whitespace-nowrap shrink-0">Busyness Calendar</span>
+          <span className="whitespace-nowrap shrink-0">Cycle Calendar</span>
         </nav>
 
         <div className="shrink-0">

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Award, CalendarHeart, CheckCircle2, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { Award, CalendarHeart, CheckCircle2, ChevronLeft, ChevronRight, Moon, Plus, Trash2 } from 'lucide-react';
 import { useSpace } from '../context/SpaceContext';
 import {
   deleteAccomplishment,
@@ -10,13 +10,16 @@ import {
 import {
   ACCOMPLISHMENT_CATEGORY_LABELS,
   BUSYNESS_META,
+  CYCLE_PHASE_META,
   LIMITS,
   type AccomplishmentCategory,
   type AccomplishmentOwner,
   type BusynessLevel,
   type BusynessLog,
+  type CycleLog,
   type PartnerSlot,
 } from '../types/knowme';
+import { computeCycleSummary, evaluateDateCycleStatus } from '../utils/cycle';
 import {
   buildMonthGrid,
   formatMonthYear,
@@ -31,9 +34,13 @@ const BUSYNESS_LEVELS: BusynessLevel[] = ['light', 'steady', 'busy', 'packed'];
 
 interface MonthlyCalendarViewProps {
   focusWinSignal: number;
+  onOpenCycleCalendar?: () => void;
 }
 
-export function MonthlyCalendarView({ focusWinSignal }: MonthlyCalendarViewProps) {
+export function MonthlyCalendarView({
+  focusWinSignal,
+  onOpenCycleCalendar,
+}: MonthlyCalendarViewProps) {
   const {
     user,
     space,
@@ -41,6 +48,8 @@ export function MonthlyCalendarView({ focusWinSignal }: MonthlyCalendarViewProps
     busynessLogs,
     accomplishments,
     timelineEvents,
+    cycleSettings,
+    cycleLogs,
     getPartnerLabel,
     showToast,
   } = useSpace();
@@ -123,6 +132,18 @@ export function MonthlyCalendarView({ focusWinSignal }: MonthlyCalendarViewProps
     const recurring = timelineByMonthDay.recurringMap.get(dateStr.slice(5)) || [];
     return [...exact, ...recurring];
   }
+
+  const primaryCycleContext = useMemo(() => {
+    const slot =
+      cycleSettings.find((s) => s.enabled)?.partnerSlot || cycleLogs[0]?.partnerSlot || null;
+    if (!slot) return null;
+    const logs = cycleLogs.filter((l) => l.partnerSlot === slot);
+    const settings = cycleSettings.find((s) => s.partnerSlot === slot) || null;
+    const map = new Map<string, CycleLog>();
+    for (const l of logs) map.set(l.date, l);
+    const summary = computeCycleSummary(logs, settings, today);
+    return { slot, map, summary };
+  }, [cycleLogs, cycleSettings, today]);
 
   // Sync busyness draft inputs whenever selectedDate or activeSlotTab changes
   React.useEffect(() => {
@@ -241,6 +262,9 @@ export function MonthlyCalendarView({ focusWinSignal }: MonthlyCalendarViewProps
   const selectedDayLogs = busynessByDate.get(selectedDate) || {};
   const selectedDayWins = winsByDate.get(selectedDate) || [];
   const selectedDayMilestones = getTimelineEventsForDate(selectedDate);
+  const selectedDayCycle = primaryCycleContext
+    ? evaluateDateCycleStatus(selectedDate, primaryCycleContext.map, primaryCycleContext.summary)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -373,12 +397,35 @@ export function MonthlyCalendarView({ focusWinSignal }: MonthlyCalendarViewProps
                     >
                       {cell.dayNumber}
                     </span>
-                    {milestones.length > 0 && (
-                      <CalendarHeart
-                        className="w-3.5 h-3.5 text-[#7B3E52] shrink-0"
-                        aria-label={milestones[0].title}
-                      />
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {primaryCycleContext &&
+                        (() => {
+                          const cyc = evaluateDateCycleStatus(
+                            cell.dateStr,
+                            primaryCycleContext.map,
+                            primaryCycleContext.summary
+                          );
+                          if (cyc.isLoggedPeriod || cyc.isPredictedPeriod) {
+                            return (
+                              <Moon
+                                className={`w-3 h-3 shrink-0 ${
+                                  cyc.isLoggedPeriod ? 'text-[#7B3E52]' : 'text-[#7B3E52]/55'
+                                }`}
+                                aria-label={
+                                  cyc.isLoggedPeriod ? 'Logged period day' : 'Predicted period day'
+                                }
+                              />
+                            );
+                          }
+                          return null;
+                        })()}
+                      {milestones.length > 0 && (
+                        <CalendarHeart
+                          className="w-3.5 h-3.5 text-[#7B3E52] shrink-0"
+                          aria-label={milestones[0].title}
+                        />
+                      )}
+                    </div>
                   </div>
 
                   {/* Middle: Dual Partner Busyness Bars */}
@@ -444,6 +491,31 @@ export function MonthlyCalendarView({ focusWinSignal }: MonthlyCalendarViewProps
                     <span>{m.title}</span>
                   </p>
                 ))}
+              </div>
+            )}
+            {primaryCycleContext && selectedDayCycle?.phase && (
+              <div className="pt-1.5 flex items-center justify-between gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 text-[#7B3E52]">
+                  <Moon className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {getPartnerLabel(primaryCycleContext.slot)}:{' '}
+                    {selectedDayCycle.isLoggedPeriod
+                      ? 'Period day'
+                      : selectedDayCycle.isPredictedPeriod
+                      ? 'Est. period'
+                      : CYCLE_PHASE_META[selectedDayCycle.phase].shortLabel}
+                    {selectedDayCycle.cycleDay ? ` (D${selectedDayCycle.cycleDay})` : ''}
+                  </span>
+                </span>
+                {onOpenCycleCalendar && (
+                  <button
+                    type="button"
+                    onClick={onOpenCycleCalendar}
+                    className="text-[#2C4C3B] font-medium hover:underline shrink-0"
+                  >
+                    Cycle view
+                  </button>
+                )}
               </div>
             )}
           </div>

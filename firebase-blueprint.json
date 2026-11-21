@@ -492,6 +492,137 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "CycleSettings": {
+      "title": "CycleSettings",
+      "description": "Cycle length, period duration, luteal phase, and partner care preferences per partner slot.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "partnerSlot": {
+          "type": "string",
+          "enum": ["partnerA", "partnerB"]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "averageCycleLength": {
+          "type": "integer",
+          "description": "Typical cycle length in days (21 to 45)."
+        },
+        "averagePeriodLength": {
+          "type": "integer",
+          "description": "Typical period duration in days (2 to 10)."
+        },
+        "lutealLength": {
+          "type": "integer",
+          "description": "Typical luteal phase length in days (10 to 18)."
+        },
+        "careNotes": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "partnerSlot",
+        "enabled",
+        "averageCycleLength",
+        "averagePeriodLength",
+        "lutealLength",
+        "careNotes",
+        "updatedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CycleLog": {
+      "title": "CycleLog",
+      "description": "Daily cycle record tracking period days, flow intensity, mood, symptoms, and partner care notes.",
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "partnerSlot": {
+          "type": "string",
+          "enum": ["partnerA", "partnerB"]
+        },
+        "isPeriodDay": {
+          "type": "boolean"
+        },
+        "flow": {
+          "type": "string",
+          "enum": ["none", "spotting", "light", "medium", "heavy"]
+        },
+        "mood": {
+          "type": "string",
+          "enum": ["", "calm", "happy", "sensitive", "tired", "irritable", "anxious", "energized"]
+        },
+        "symptoms": {
+          "type": "array",
+          "description": "Bounded allowlist of up to 8 daily cycle symptoms."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "spaceId",
+        "date",
+        "partnerSlot",
+        "isPeriodDay",
+        "flow",
+        "mood",
+        "symptoms",
+        "note",
+        "updatedBy",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -526,6 +657,14 @@
     "/coupleSpaces/{spaceId}/accomplishments/{winId}": {
       "schema": { "$ref": "#/entities/Accomplishment" },
       "description": "Daily accomplishments and wins logged on calendar dates."
+    },
+    "/coupleSpaces/{spaceId}/cycleSettings/{slotId}": {
+      "schema": { "$ref": "#/entities/CycleSettings" },
+      "description": "Cycle length, period duration, and care preferences keyed by partner slot."
+    },
+    "/coupleSpaces/{spaceId}/cycleLogs/{logId}": {
+      "schema": { "$ref": "#/entities/CycleLog" },
+      "description": "Daily cycle logs keyed by YYYY-MM-DD_slot with period status, flow, mood, and symptoms."
     }
   }
 }

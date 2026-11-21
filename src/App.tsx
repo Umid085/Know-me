@@ -5,11 +5,13 @@ import {
   CalendarHeart,
   CheckSquare,
   Menu,
+  Moon,
   Plus,
   Settings,
   Sun,
   X,
 } from 'lucide-react';
+import { CycleCalendarView } from './components/CycleCalendarView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MonthlyCalendarView } from './components/MonthlyCalendarView';
 import { NotableDatesTimelineView } from './components/NotableDatesTimelineView';
@@ -27,6 +29,7 @@ const NAV_ITEMS: { id: WorkspaceTab; label: string; icon: React.ComponentType<{ 
   { id: 'planner', label: 'Shared Planner', icon: CheckSquare },
   { id: 'timeline', label: 'Notable Dates', icon: CalendarHeart },
   { id: 'calendar', label: 'Calendar & Wins', icon: CalendarDays },
+  { id: 'cycle', label: 'Cycle Calendar', icon: Moon },
 ];
 
 const TAB_TITLES: Record<WorkspaceTab, { title: string; ctaLabel?: string }> = {
@@ -35,17 +38,18 @@ const TAB_TITLES: Record<WorkspaceTab, { title: string; ctaLabel?: string }> = {
   planner: { title: 'Shared Planner', ctaLabel: 'New Plan' },
   timeline: { title: 'Notable Dates Timeline', ctaLabel: 'Add Notable Date' },
   calendar: { title: 'Busyness & Accomplishments', ctaLabel: 'Log Accomplishment' },
+  cycle: { title: 'Cycle Calendar', ctaLabel: 'Set Period Start' },
   settings: { title: 'Space & Pairing Settings' },
 };
 
 function WorkspaceShell() {
   const {
     user,
-    authLoading,
     profileLoading,
     space,
     spaceLoading,
     currentUserSlot,
+    signOut,
     toast,
     dismissToast,
   } = useSpace();
@@ -57,15 +61,34 @@ function WorkspaceShell() {
   const [plannerSignal, setPlannerSignal] = useState(0);
   const [timelineSignal, setTimelineSignal] = useState(0);
   const [calendarWinSignal, setCalendarWinSignal] = useState(0);
+  const [cycleLogSignal, setCycleLogSignal] = useState(0);
 
-  if (authLoading || profileLoading || spaceLoading) {
+  if (user && (profileLoading || spaceLoading)) {
     return (
       <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center p-6">
-        <div className="w-full max-w-sm space-y-4">
-          <p className="font-serif text-2xl text-[#231F1D] text-center">Know Me</p>
-          <div className="space-y-2.5 animate-pulse">
-            <div className="h-3 bg-[#E5DDD1] rounded w-3/4 mx-auto" />
-            <div className="h-3 bg-[#E5DDD1] rounded w-1/2 mx-auto" />
+        <div className="w-full max-w-sm bg-white border border-[#E5DDD1] rounded-xl p-7 text-center space-y-4">
+          <p className="font-serif text-2xl text-[#231F1D]">Know Me</p>
+          <p className="text-sm text-[#6D645D]">Opening your shared couple space...</p>
+          <div className="space-y-2 animate-pulse pt-1">
+            <div className="h-2.5 bg-[#E5DDD1] rounded w-3/4 mx-auto" />
+            <div className="h-2.5 bg-[#E5DDD1] rounded w-1/2 mx-auto" />
+          </div>
+          <div className="pt-2 flex items-center justify-center gap-4 text-xs">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-[#2C4C3B] font-medium hover:underline"
+            >
+              Reload
+            </button>
+            <span className="text-[#E5DDD1]" aria-hidden="true">·</span>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="text-[#6D645D] hover:text-[#231F1D]"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </div>
@@ -90,6 +113,8 @@ function WorkspaceShell() {
       setPlannerSignal((n) => n + 1);
     } else if (activeTab === 'timeline') {
       setTimelineSignal((n) => n + 1);
+    } else if (activeTab === 'cycle') {
+      setCycleLogSignal((n) => n + 1);
     } else if (activeTab === 'calendar' || activeTab === 'today') {
       setActiveTab('calendar');
       setCalendarWinSignal((n) => n + 1);
@@ -216,7 +241,13 @@ function WorkspaceShell() {
           {activeTab === 'timeline' && (
             <NotableDatesTimelineView openDrawerSignal={timelineSignal} />
           )}
-          {activeTab === 'calendar' && <MonthlyCalendarView focusWinSignal={calendarWinSignal} />}
+          {activeTab === 'calendar' && (
+            <MonthlyCalendarView
+              focusWinSignal={calendarWinSignal}
+              onOpenCycleCalendar={() => handleNavigate('cycle')}
+            />
+          )}
+          {activeTab === 'cycle' && <CycleCalendarView openQuickLogSignal={cycleLogSignal} />}
           {activeTab === 'settings' && <SpaceSettingsView />}
         </main>
       </div>

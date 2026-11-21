@@ -7,6 +7,8 @@ import type {
   Accomplishment,
   BusynessLog,
   CoupleSpace,
+  CycleLog,
+  CycleSettings,
   PartnerEntry,
   PartnerSlot,
   PlannerItem,
@@ -34,6 +36,8 @@ interface SpaceContextValue {
   timelineEvents: TimelineEvent[];
   busynessLogs: BusynessLog[];
   accomplishments: Accomplishment[];
+  cycleSettings: CycleSettings[];
+  cycleLogs: CycleLog[];
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   toast: ToastMessage | null;
@@ -57,6 +61,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [busynessLogs, setBusynessLogs] = useState<BusynessLog[]>([]);
   const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
+  const [cycleSettings, setCycleSettings] = useState<CycleSettings[]>([]);
+  const [cycleLogs, setCycleLogs] = useState<CycleLog[]>([]);
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [fatalError, setFatalError] = useState<Error | null>(null);
@@ -90,22 +96,39 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  // 1. Auth listener
+  // 1. Auth listener (with safety timeout so preview never hangs if iframe storage is slow)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
+    const safetyTimer = window.setTimeout(() => {
       setAuthLoading(false);
-      if (!firebaseUser) {
-        setProfile(null);
-        setSpace(null);
-        setPartnerEntries([]);
-        setPlannerItems([]);
-        setTimelineEvents([]);
-        setBusynessLogs([]);
-        setAccomplishments([]);
+    }, 4000);
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        window.clearTimeout(safetyTimer);
+        setUser(firebaseUser);
+        setAuthLoading(false);
+        if (!firebaseUser) {
+          setProfile(null);
+          setSpace(null);
+          setPartnerEntries([]);
+          setPlannerItems([]);
+          setTimelineEvents([]);
+          setBusynessLogs([]);
+          setAccomplishments([]);
+          setCycleSettings([]);
+          setCycleLogs([]);
+        }
+      },
+      () => {
+        window.clearTimeout(safetyTimer);
+        setAuthLoading(false);
       }
-    });
-    return () => unsubscribe();
+    );
+    return () => {
+      window.clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
   // 2. Ensure & subscribe to userProfile when authenticated
@@ -199,7 +222,11 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
   // 3b. Subscribe to the 5 subcollections only once parent space membership is confirmed
   const confirmedSpaceId =
-    user && space && space.id === activeSpaceId && space.memberUids.includes(user.uid)
+    user &&
+    space &&
+    space.id === activeSpaceId &&
+    Array.isArray(space.memberUids) &&
+    space.memberUids.includes(user.uid)
       ? space.id
       : '';
 
@@ -210,6 +237,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       setTimelineEvents([]);
       setBusynessLogs([]);
       setAccomplishments([]);
+      setCycleSettings([]);
+      setCycleLogs([]);
       return;
     }
 
@@ -327,12 +356,53 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    const cycleSettingsPath = `${spacePath}/cycleSettings`;
+    const unsubCycleSettings = onSnapshot(
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'cycleSettings'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CycleSettings, 'id'>) }));
+        setCycleSettings(list);
+      },
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.LIST, cycleSettingsPath);
+        } catch (wrapped) {
+          setFatalError(wrapped instanceof Error ? wrapped : new Error(String(wrapped)));
+        }
+      }
+    );
+
+    const cycleLogsPath = `${spacePath}/cycleLogs`;
+    const unsubCycleLogs = onSnapshot(
+      query(
+        getSpaceSubcollectionRef(confirmedSpaceId, 'cycleLogs'),
+        where('spaceId', '==', confirmedSpaceId)
+      ),
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CycleLog, 'id'>) }));
+        list.sort((a, b) => b.date.localeCompare(a.date));
+        setCycleLogs(list);
+      },
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.LIST, cycleLogsPath);
+        } catch (wrapped) {
+          setFatalError(wrapped instanceof Error ? wrapped : new Error(String(wrapped)));
+        }
+      }
+    );
+
     return () => {
       unsubEntries();
       unsubPlanner();
       unsubTimeline();
       unsubBusyness();
       unsubWins();
+      unsubCycleSettings();
+      unsubCycleLogs();
     };
   }, [user, confirmedSpaceId]);
 
@@ -372,6 +442,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     timelineEvents,
     busynessLogs,
     accomplishments,
+    cycleSettings,
+    cycleLogs,
     signInWithGoogle,
     signOut,
     toast,

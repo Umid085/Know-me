@@ -9,7 +9,19 @@ export type TimelineCategory = 'milestone' | 'anniversary' | 'trip' | 'first';
 export type BusynessLevel = 'light' | 'steady' | 'busy' | 'packed';
 export type AccomplishmentOwner = PartnerSlot | 'together';
 export type AccomplishmentCategory = 'personal' | 'career' | 'relationship' | 'wellness';
-export type WorkspaceTab = 'today' | 'dossiers' | 'planner' | 'timeline' | 'calendar' | 'settings';
+export type WorkspaceTab = 'today' | 'dossiers' | 'planner' | 'timeline' | 'calendar' | 'cycle' | 'settings';
+export type CycleFlow = 'none' | 'spotting' | 'light' | 'medium' | 'heavy';
+export type CycleMood = '' | 'calm' | 'happy' | 'sensitive' | 'tired' | 'irritable' | 'anxious' | 'energized';
+export type CycleSymptom =
+  | 'cramps'
+  | 'headache'
+  | 'bloating'
+  | 'fatigue'
+  | 'backache'
+  | 'cravings'
+  | 'tender'
+  | 'insomnia';
+export type CyclePhase = 'menstrual' | 'follicular' | 'ovulation' | 'luteal';
 
 export const LIMITS = {
   spaceName: 80,
@@ -26,6 +38,8 @@ export const LIMITS = {
   busynessNote: 300,
   accomplishmentTitle: 140,
   accomplishmentReflection: 1000,
+  cycleCareNotes: 500,
+  cycleDailyNote: 400,
 } as const;
 
 export interface UserProfile {
@@ -235,4 +249,112 @@ export const ACCOMPLISHMENT_CATEGORY_LABELS: Record<AccomplishmentCategory, stri
   career: 'Work & Study',
   relationship: 'Together',
   wellness: 'Health & Rest',
+};
+
+export interface CycleSettings {
+  id: string;
+  spaceId: string;
+  partnerSlot: PartnerSlot;
+  enabled: boolean;
+  averageCycleLength: number;
+  averagePeriodLength: number;
+  lutealLength: number;
+  careNotes: string;
+  updatedBy: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface CycleLog {
+  id: string;
+  spaceId: string;
+  date: string;
+  partnerSlot: PartnerSlot;
+  isPeriodDay: boolean;
+  flow: CycleFlow;
+  mood: CycleMood;
+  symptoms: CycleSymptom[];
+  note: string;
+  updatedBy: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export const CYCLE_FLOW_LABELS: Record<CycleFlow, string> = {
+  none: 'No flow',
+  spotting: 'Spotting',
+  light: 'Light',
+  medium: 'Medium',
+  heavy: 'Heavy',
+};
+
+export const CYCLE_MOOD_LABELS: Record<Exclude<CycleMood, ''>, string> = {
+  calm: 'Calm',
+  happy: 'Happy',
+  energized: 'Energized',
+  sensitive: 'Sensitive',
+  tired: 'Tired',
+  irritable: 'Irritable',
+  anxious: 'Anxious',
+};
+
+export const CYCLE_SYMPTOM_LABELS: Record<CycleSymptom, string> = {
+  cramps: 'Cramps',
+  fatigue: 'Low energy',
+  headache: 'Headache',
+  bloating: 'Bloating',
+  backache: 'Backache',
+  cravings: 'Cravings',
+  tender: 'Tenderness',
+  insomnia: 'Restless sleep',
+};
+
+export const CYCLE_PHASE_META: Record<
+  CyclePhase,
+  {
+    label: string;
+    shortLabel: string;
+    rhythmNote: string;
+    partnerSupportHint: string;
+    accentTextClass: string;
+    dotClass: string;
+    softBgClass: string;
+  }
+> = {
+  menstrual: {
+    label: 'Menstrual Phase',
+    shortLabel: 'Period',
+    rhythmNote: 'Restorative days — energy is often lower and warmth or quiet comfort helps.',
+    partnerSupportHint: 'Offer extra gentleness, warm drinks, fewer unplanned errands, and cozy evenings.',
+    accentTextClass: 'text-[#7B3E52]',
+    dotClass: 'bg-[#7B3E52]',
+    softBgClass: 'bg-[#7B3E52]/10',
+  },
+  follicular: {
+    label: 'Follicular Phase',
+    shortLabel: 'Follicular',
+    rhythmNote: 'Rising energy and curiosity — a great window for outings, projects, and fresh plans.',
+    partnerSupportHint: 'Great timing for spontaneous date nights, shared goals, or trying a new spot together.',
+    accentTextClass: 'text-[#2C4C3B]',
+    dotClass: 'bg-[#2C4C3B]',
+    softBgClass: 'bg-[#2C4C3B]/10',
+  },
+  ovulation: {
+    label: 'Ovulation & Fertile Window',
+    shortLabel: 'Fertile',
+    rhythmNote: 'Peak energy and social bandwidth around estimated ovulation.',
+    partnerSupportHint: 'High-connection window — ideal for quality time, conversation, and active plans.',
+    accentTextClass: 'text-[#A67428]',
+    dotClass: 'bg-[#A67428]',
+    softBgClass: 'bg-[#A67428]/12',
+  },
+  luteal: {
+    label: 'Luteal Phase',
+    shortLabel: 'Luteal',
+    rhythmNote: 'Gradual wind-down toward the next cycle; late days can bring sensitivity or fatigue.',
+    partnerSupportHint: 'Keep schedules predictable, check in gently, and stock favorite comfort snacks.',
+    accentTextClass: 'text-[#5E4E5E]',
+    dotClass: 'bg-[#7C6B7D]',
+    softBgClass: 'bg-[#7C6B7D]/10',
+  },
 };
